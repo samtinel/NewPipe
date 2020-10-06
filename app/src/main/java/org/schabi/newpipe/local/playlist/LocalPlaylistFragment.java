@@ -42,6 +42,7 @@ import org.schabi.newpipe.report.UserAction;
 import org.schabi.newpipe.util.Localization;
 import org.schabi.newpipe.util.NavigationHelper;
 import org.schabi.newpipe.util.OnClickGesture;
+import org.schabi.newpipe.util.ShareUtils;
 import org.schabi.newpipe.util.StreamDialogEntry;
 
 import java.util.ArrayList;
@@ -373,6 +374,9 @@ public class LocalPlaylistFragment extends BaseLocalListFragment<List<PlaylistSt
                             .show();
                 }
                 break;
+              case R.id.menu_item_share:
+                shareLocalPlaylistURL();
+                break;
             default:
                 return super.onOptionsItemSelected(item);
         }
@@ -468,6 +472,38 @@ public class LocalPlaylistFragment extends BaseLocalListFragment<List<PlaylistSt
                     hideLoading();
                     isRemovingWatched = false;
                 }, this::onError));
+    }
+
+    private void shareLocalPlaylistURL() {
+        /* "URL"-playlist can only contain up to 50 videos.
+         * If the playlist contains above 50 videos, show error toast.
+         * If the playlist contains non-youtube link, show error toast.
+         * TODO: incompatible playlists - maybe grey out if larger than 50 videos and non-yt?
+         */
+        final String playlistStub = "https://www.youtube.com/watch_videos?video_ids=";
+        final StringBuilder shareURL = new StringBuilder(playlistStub);
+
+        disposables.add(playlistManager.getPlaylistStreams(playlistId)
+                .subscribeOn(Schedulers.io())
+                .map((List<PlaylistStreamEntry> playlist) -> {
+                    // Playlist data
+                    final Iterator<PlaylistStreamEntry> playlistIter = playlist.iterator();
+                    while (playlistIter.hasNext()) {
+                        final PlaylistStreamEntry playlistItem = playlistIter.next();
+                        // extract id, this assumes the form "https://youtube.com/watch?v=[id]"
+                        final int prefixLength = "https://www.youtube.com/watch?v=".length();
+                        final String vidId = playlistItem.getStreamEntity().getUrl();
+                        shareURL.append(vidId.substring(prefixLength)).append(',');
+                    }
+                    // remove last left over ','
+                    shareURL.deleteCharAt(shareURL.length() - 1);
+                    ShareUtils.shareUrl(requireContext(), name, shareURL.toString());
+                    return playlist;
+                })
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(flow -> {
+                }, this::onError));
+
     }
 
     @Override
